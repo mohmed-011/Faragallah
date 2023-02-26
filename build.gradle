@@ -1,0 +1,257 @@
+
+plugins {
+    id 'java'
+    id 'application'
+    id 'maven-publish'
+    id 'org.openjfx.javafxplugin' version '0.0.10'
+    id 'org.beryx.jlink' version '2.24.1'
+
+//    id 'pl.allegro.tech.build.axion-release' version '1.14.0'
+//    Only saving this site... nice!
+//    https://axion-release-plugin.readthedocs.io/en/latest/examples/examples/
+
+    id 'signing'
+}
+
+
+ext {
+
+    Properties _props = new Properties()
+    File _propsFile = new File('./version.properties')
+    _props.load(_propsFile.newDataInputStream())
+
+    // Load act version from properties
+    project.version =
+            _props.getProperty("majorVersion") +
+                    "." + _props.getProperty("minorVersion") +
+                    "." + _props.getProperty("buildNumber")
+    "+" + _props.getProperty("artifactBuildNumber")
+
+    // Variables used in flows to update..
+    propsFile = _propsFile
+    props = _props
+    buildV = _props.getProperty("buildNumber")
+    buildA = _props.getProperty("artifactBuildNumber")
+
+    fullVersion = project.version + "+" + buildA
+}
+
+
+group 'io.github.gleidsonmt'
+
+repositories {
+    mavenCentral()
+}
+
+javafx {
+    version = '17.0.1'
+    modules = [
+            'javafx.controls',
+            'javafx.fxml', 'javafx.web'
+    ]
+}
+
+application {
+    mainClass = 'io.github.gleidsonmt.gndecorator.App'
+    mainModule = 'io.github.gleidsonmt.gndecorator'
+}
+
+dependencies {
+    implementation files('vendor/scenicView.jar')
+    implementation 'org.jetbrains:annotations:23.0.0'
+}
+
+task replaceVersionInREADME {
+
+    // Maven
+//    ant.replaceregexp(match:'<version>([0-9+\\.]+)</version>',
+//            replace:"<version>${version}</version>", flags:'g', byline:true, encoding: 'UTF-8') {
+//        fileset(dir: '.', includes: 'README.md')
+//    }
+//    // Gradle
+//    ant.replaceregexp(match: "${group}\\:${name}\\:([0-9+#\\.]+)",
+//            replace:"${group}\\:${name}:${version}", flags:'g', byline:true, encoding: 'UTF-8') {
+//        fileset(dir: '.', includes: 'README.md')
+//    }
+
+//  Release Badge
+//    ant.replaceregexp(match:'v([0-9+\\.]+)',
+//            replace:"v${version}", flags:'g', byline:true, encoding: 'UTF-8') {
+//        fileset(dir: '.', includes: 'README.md')
+//    }
+
+    ant.replaceregexp(match:'Build-([0-9+\\.]+)',
+            replace:"Build-${fullVersion}", flags:'g', byline:true, encoding: 'UTF-8') {
+        fileset(dir: '.', includes: 'README.md')
+    }
+
+}
+
+task buildInServer(dependsOn: build) {
+    group 'Java CI'
+    println 'Needs to build in server..'
+//        updateV = needsUpdate;
+
+    if (project.hasProperty("server")) {
+        println 'Creating a new Build version'
+
+        int sum = (buildV as BigDecimal) + 1
+        props.setProperty('buildNumber', sum.toString())
+        println "Your new build version is ${props.getProperty("buildNumber")}"
+        props.store(propsFile.newWriter(), null)
+        props.load(propsFile.newDataInputStream())
+        println 'Building in server...'
+        println "Act version ${project.version}"
+    }
+}
+
+task incrementBuildArtifactVersion()  {
+    group 'build'
+    println 'incrementing build artifact'
+    if (!project.hasProperty("server")) {
+        println "update artifact"
+        int sum = (buildA as BigDecimal) + 1
+        props.setProperty('artifactBuildNumber', sum.toString())
+        println "Your new artifact version is ${props.getProperty("artifactBuildNumber")}"
+        props.store(propsFile.newWriter(), null)
+        props.load(propsFile.newDataInputStream())
+        println "Storing Properties."
+    } else println 'skipping.. it is a server build..'
+}
+
+ext.save = {
+    props.store(propsFile.newWriter(), null)
+    props.load(propsFile.newDataInputStream())
+    println "Storing Properties."
+}
+
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+//task javadocJar(type: Jar) {
+//    classifier = 'javadoc'
+//    from javadoc
+//}
+
+artifacts {
+//    archives sourcesJar, javadocJar
+    archives sourcesJar
+}
+
+signing {
+    setRequired {
+//        // signing is only required if the artifacts are to be published
+//        gradle.taskGraph.allTasks.any { (it == PublishToMavenRepository) }
+        gradle.taskGraph.allTasks.any { it.equals( PublishToMavenRepository) }
+    }
+    sign configurations.archives
+}
+
+
+publishing {
+
+    publications {
+
+        mavenJava(MavenPublication) {
+            from components.java
+
+            pom {
+
+                name = 'GNDecorator'
+                description = 'Custom window decorator for javafx apps.'
+                url = 'https://github.com/gleidsonmt/gndecorator'
+
+                licenses {
+                    license {
+                        name = 'GNU General Public License v3.0'
+                        url = 'https://www.gnu.org/licenses/gpl-3.0-standalone.html'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = 'Gleidson2020'
+                        name = 'Gleidson Neves da Silveira'
+                        email = 'gleidisonmt@gmail.com'
+                    }
+                }
+
+                scm {
+                    url = 'https://github.com/gleidsonmt/gndecorator'
+                    connection = 'scm:https://github.com/gleidsonmt/gndecorator.git'
+                    developerConnection = 'scm:git://github.com/gleidsonmt/gndecorator.git'
+                }
+
+                repositories {
+
+                    maven {
+                        name = "GNDecorator"
+                        url = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
+                        credentials {
+                            username = project.properties["ossrhUser"]
+                            password = project.properties["ossrhPassword"]
+
+                        }
+                    }
+
+//                    maven {
+//                        name = "GitHubPackages"
+//                        url = "https://maven.pkg.github.com/gleidsonmt/gndecorator"
+//                        credentials {
+//                            username = project.properties["github.user"]
+//                            password = project.properties["github.token"]
+//                        }
+//                    }
+
+                }
+            }
+        }
+    }
+}
+
+jlink {
+    imageZip = project.file("${buildDir}/distributions/app-${javafx.platform.classifier}.zip")
+    options = ['--strip-debug', '--compress', '2', '--no-header-files', '--no-man-pages']
+    launcher {
+        name = 'GNDecorator'
+    }
+
+    jpackage {
+
+        imageOptions = [
+                '--icon', 'logo_256.ico'
+        ]
+        installerType = 'exe'
+        installerOptions = [
+                '--description', "A decorator stage for javafx apps.",
+                '--copyright', 'Copyrigth © 2021-2022 GLEIDSON NEVES DA SILVEIRA'
+                , '--icon', 'logo_256.ico'
+
+        ]
+
+        addExtraDependencies("javafx")
+    }
+}
+
+//uploadArchives {
+//    repositories {
+//        mavenDeployer {
+//            beforeDeployment { deployment -> signing.signPom(deployment) }
+//
+//            repository(url: "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/") {
+//                authentication(userName: project.properties['ossrhUser'], password: project.properties["ossrhPassword"])
+//            }
+//
+//            snapshotRepository(url: "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
+//                authentication(userName: project.properties['ossrhUser'], password: project.properties["ossrhPassword"])
+//            }
+//        }
+//    }
+//}
+
+jlinkZip {
+    group = 'distribution'
+}
+

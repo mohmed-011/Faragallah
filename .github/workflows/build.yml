@@ -1,0 +1,39 @@
+
+
+name: Java Build Test ||
+run-name: Build by ${{ github.actor }} 🧬
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v1
+        with:
+          java-version: 17.0.1
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build with gradle
+        run: ./gradlew build -Pserver
+
+      - name: Add & Commit
+        uses: EndBug/add-and-commit@v9.1.1
+        with:
+          pull: '--rebase --autostash'
+
+#        run: ./gradlew build
+#      - name: Increment Version
+#        run: ./gradlew incrementVersion
